@@ -21,7 +21,7 @@ MULTIPLIERS: Dict[str, float] = {"direct": 1.0, "indirect": 0.4, "induced": 0.3}
 
 def _load_economy() -> pd.DataFrame:
     try:
-        return pd.DataFrame(pd.read_json("ml-service/data/space_economy.json"))
+        return pd.DataFrame(pd.read_json("data/space_economy.json"))
     except Exception:
         # fallback aligns with growth._load_economy heuristic to keep API responsive
         years = list(range(2012, 2024))

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { GrowthResponse } from '@/lib/schemas';
 import OrbitalRings from '@/components/OrbitalRings';
 
@@ -20,6 +20,10 @@ export default function GrowthPage() {
       setError(e?.message || 'Failed');
     } finally { setLoading(false); }
   }
+
+  useEffect(() => { run(); // auto-run on first load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="p-6 space-y-4">

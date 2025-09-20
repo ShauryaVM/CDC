@@ -1,18 +1,20 @@
 from typing import List, Dict, Any
+import os
 
 import numpy as np
 import pandas as pd
 
 try:
-    from transformers import pipeline
-    _has_hf = True
+    from transformers import pipeline  # noqa: F401
+    _transformers_available = True
 except Exception:
-    _has_hf = False
+    _transformers_available = False
+_ENABLE_HF = bool(os.getenv("ENABLE_HF", "")) and _transformers_available
 
 
 def _load_economy() -> pd.DataFrame:
     try:
-        return pd.DataFrame(pd.read_json("ml-service/data/space_economy.json"))
+        return pd.DataFrame(pd.read_json("data/space_economy.json"))
     except Exception:
         years = list(range(2012, 2024))
         rows = []
@@ -33,7 +35,7 @@ def _load_economy() -> pd.DataFrame:
 
 
 def _sentiment_score_texts(texts: List[str]) -> float:
-    if not _has_hf:
+    if not _ENABLE_HF:
         # Heuristic fallback: average of simple lexicon-based proxies
         rng = np.random.default_rng(42)
         return float(np.clip(rng.normal(0.2, 0.25), -1, 1))

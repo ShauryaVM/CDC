@@ -1,16 +1,28 @@
 import json
+import os
 from typing import List, Dict, Any
 
 import numpy as np
 import pandas as pd
-from prophet import Prophet
 from sklearn.ensemble import RandomForestRegressor
-from statsmodels.tsa.arima.model import ARIMA
+
+_ENABLE_PROPHET = bool(os.getenv("ENABLE_PROPHET", ""))
+_ENABLE_ARIMA = bool(os.getenv("ENABLE_ARIMA", ""))
+if _ENABLE_PROPHET:
+    try:
+        from prophet import Prophet  # type: ignore
+    except Exception:
+        _ENABLE_PROPHET = False
+if _ENABLE_ARIMA:
+    try:
+        from statsmodels.tsa.arima.model import ARIMA  # type: ignore
+    except Exception:
+        _ENABLE_ARIMA = False
 
 
 def _load_economy() -> pd.DataFrame:
     try:
-        with open("ml-service/data/space_economy.json", "r", encoding="utf-8") as f:
+        with open("data/space_economy.json", "r", encoding="utf-8") as f:
             data = json.load(f)
         return pd.DataFrame(data)
     except FileNotFoundError:
@@ -71,23 +83,29 @@ def forecast_growth(industry_ids: List[str], horizon_years: int) -> Dict[str, An
         values = series["valueAddedCurrentUSD"].astype(float).values
 
         # Prophet
-        try:
-            df_prophet = pd.DataFrame({
-                "ds": pd.to_datetime(series["year"].astype(str) + "-12-31"),
-                "y": values,
-            })
-            m = Prophet(yearly_seasonality=True)
-            m.fit(df_prophet)
-            future = m.make_future_dataframe(periods=horizon_years, freq="Y")
-            yhat_prophet = m.predict(future).tail(horizon_years)["yhat"].values
-        except Exception:
+        if _ENABLE_PROPHET:
+            try:
+                df_prophet = pd.DataFrame({
+                    "ds": pd.to_datetime(series["year"].astype(str) + "-12-31"),
+                    "y": values,
+                })
+                m = Prophet(yearly_seasonality=True)
+                m.fit(df_prophet)
+                future = m.make_future_dataframe(periods=horizon_years, freq="Y")
+                yhat_prophet = m.predict(future).tail(horizon_years)["yhat"].values
+            except Exception:
+                yhat_prophet = np.repeat(values[-1], horizon_years)
+        else:
             yhat_prophet = np.repeat(values[-1], horizon_years)
 
         # ARIMA quick baseline
-        try:
-            arima = ARIMA(values, order=(1, 1, 1)).fit()
-            yhat_arima = arima.forecast(horizon_years)
-        except Exception:
+        if _ENABLE_ARIMA:
+            try:
+                arima = ARIMA(values, order=(1, 1, 1)).fit()
+                yhat_arima = arima.forecast(horizon_years)
+            except Exception:
+                yhat_arima = np.repeat(values[-1], horizon_years)
+        else:
             yhat_arima = np.repeat(values[-1], horizon_years)
 
         # Random Forest with simple features

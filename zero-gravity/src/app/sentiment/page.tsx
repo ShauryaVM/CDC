@@ -1,5 +1,5 @@
 "use client";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SentimentResponse } from '@/lib/schemas';
 import SentimentOrbit from '@/components/SentimentOrbit';
 
@@ -21,6 +21,10 @@ export default function SentimentPage() {
       setError(e?.message || 'Failed');
     } finally { setLoading(false); }
   }
+
+  useEffect(() => { run(); // auto-run on first load
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="p-6 space-y-4">

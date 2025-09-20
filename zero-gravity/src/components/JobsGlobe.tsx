@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef } from 'react';
 import mapboxgl from 'mapbox-gl';
+import 'mapbox-gl/dist/mapbox-gl.css';
 import type { JobsGeo } from '@/lib/schemas';
 
 type Props = { geo: JobsGeo[] };
@@ -61,7 +62,14 @@ export default function JobsGlobe({ geo }: Props) {
     return () => { map.remove(); };
   }, [geo]);
 
-  return <div ref={ref} className="w-full h-[420px] rounded border border-neutral-800" />;
+  return (
+    <div className="space-y-2">
+      {!process.env.NEXT_PUBLIC_MAPBOX_TOKEN && (
+        <div className="text-xs text-amber-400">Set NEXT_PUBLIC_MAPBOX_TOKEN in .env.local for globe visualization.</div>
+      )}
+      <div ref={ref} className="w-full h-[420px] rounded border border-neutral-800" />
+    </div>
+  );
 }
 
 
