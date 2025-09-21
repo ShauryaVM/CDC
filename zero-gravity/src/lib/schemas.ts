@@ -18,7 +18,7 @@ export type JobsItem = {
   employment_total: number;
 };
 
-export type JobsGeo = { state: string; industry_id: string; total_2030: number };
+export type JobsGeo = { state: string; industry_id: string; year: number; employment_total: number };
 export type JobsResponse = { items: JobsItem[]; geo: JobsGeo[] };
 
 export type SentimentItem = { industry_id: string; period: string; sentiment: number };

@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import type { SentimentResponse } from '@/lib/schemas';
 import SentimentOrbit from '@/components/SentimentOrbit';
+import dynamic from 'next/dynamic';
+const SentimentDashboard = dynamic(() => import('@/components/sentiment/SentimentDashboard'), { ssr: false });
 
 export default function SentimentPage() {
   const [industries, setIndustries] = useState<string[]>(['manufacturing','space_vehicles','information','professional_rd']);
@@ -41,19 +43,7 @@ export default function SentimentPage() {
       </div>
       {error && <div className="text-red-500">{error}</div>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data && <div className="col-span-1 md:col-span-2"><SentimentOrbit data={data} industries={industries} /></div>}
-        <div className="rounded border border-neutral-800 p-3">
-          <div className="font-medium mb-1">Correlations</div>
-          {data && Object.entries(data.correlations || {}).map(([k, v]) => (
-            <div key={k} className="text-sm text-neutral-300">{k}: current {v.current.toFixed(2)}, best lag {v.bestLag} (corr {v.corrAtBestLag.toFixed(2)})</div>
-          ))}
-        </div>
-        <div className="rounded border border-neutral-800 p-3">
-          <div className="font-medium mb-1">Series</div>
-          {data?.items?.slice(0, 20).map(it => (
-            <div key={`${it.industry_id}-${it.period}`} className="text-sm text-neutral-300">{it.industry_id} {it.period}: {it.sentiment.toFixed(2)}</div>
-          ))}
-        </div>
+        {data && <div className="col-span-1 md:col-span-2"><SentimentDashboard data={data} industries={industries} /></div>}
       </div>
     </div>
   );

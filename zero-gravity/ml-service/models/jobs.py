@@ -3,18 +3,81 @@ from typing import List, Dict, Any
 import numpy as np
 import pandas as pd
 
-STATE_WEIGHTS: Dict[str, float] = {
-    "CA": 1.4,
-    "TX": 1.2,
-    "FL": 1.3,
-    "CO": 1.1,
-    "WA": 1.0,
-    "VA": 0.9,
-    "AL": 0.8,
-    "AZ": 0.8,
-    "OH": 0.7,
-    "NM": 0.6,
+# Base weights for all 50 states + DC (relative concentration). These are
+# heuristic but plausible; they will be normalized per year and industry and
+# then adjusted by industry-specific bias and drift dynamics.
+STATE_BASE_WEIGHTS: Dict[str, float] = {
+    # Tier 1 space hubs
+    "CA": 1.60, "TX": 1.45, "FL": 1.35, "CO": 1.20, "WA": 1.10, "VA": 1.05,
+    "AL": 1.00, "AZ": 0.95, "OH": 0.90, "NM": 0.85,
+    # Tier 2 strong contributors
+    "MD": 0.95, "MA": 0.95, "DC": 0.90, "NY": 0.88, "PA": 0.86, "NC": 0.84,
+    "GA": 0.82, "MO": 0.80, "LA": 0.78, "UT": 0.78, "IL": 0.78, "MI": 0.76,
+    # Tier 3 broader base
+    "TN": 0.70, "SC": 0.68, "VA": 1.05, "OR": 0.68, "OK": 0.66, "WI": 0.64,
+    "MN": 0.66, "IN": 0.64, "NJ": 0.66, "CT": 0.62, "NH": 0.60, "VT": 0.56,
+    "ME": 0.56, "RI": 0.56, "DE": 0.58, "KY": 0.60, "AR": 0.58, "MS": 0.56,
+    "IA": 0.58, "KS": 0.58, "NE": 0.56, "ND": 0.52, "SD": 0.52, "ID": 0.54,
+    "MT": 0.52, "WY": 0.50, "WV": 0.54, "NV": 0.70, "AK": 0.50, "HI": 0.56,
+    "NM": 0.85, "PR": 0.40,  # PR placeholder if needed by future UI
 }
+
+# Industry-specific emphasis factors (multiplicative on base weights)
+INDUSTRY_BIAS: Dict[str, Dict[str, float]] = {
+    # Manufacturing supply chains and assembly
+    "manufacturing": {
+        "CA": 1.12, "TX": 1.10, "AZ": 1.08, "AL": 1.08, "OH": 1.08, "WA": 1.06, "CO": 1.04,
+        "MI": 1.06, "MO": 1.04
+    },
+    # Launch and vehicles operations
+    "space_vehicles": {
+        "FL": 1.16, "TX": 1.12, "CA": 1.08, "AL": 1.08, "CO": 1.06, "NM": 1.06, "AZ": 1.04, "VA": 1.04
+    },
+    # Software, data, ground networks
+    "information": {
+        "CA": 1.16, "WA": 1.12, "NY": 1.10, "MA": 1.08, "DC": 1.06, "VA": 1.06, "CO": 1.04
+    },
+    # R&D, federal labs, contractors
+    "professional_rd": {
+        "MA": 1.14, "MD": 1.12, "DC": 1.12, "VA": 1.10, "CA": 1.06, "CO": 1.06
+    },
+}
+
+def _normalized_state_weights(industry_id: str, rel_year_index: int) -> Dict[str, float]:
+    """Compute normalized weights for all states with industry bias and drift.
+
+    rel_year_index is 0 for first forecast year, 1 for next, etc.
+    We apply modest drift toward relevant hubs over time.
+    """
+    # Copy base and apply bias
+    weights = STATE_BASE_WEIGHTS.copy()
+    bias = INDUSTRY_BIAS.get(industry_id, {})
+    for st, b in bias.items():
+        if st in weights:
+            weights[st] *= b
+
+    # Drift: shift ~1% per year toward top hubs for the industry
+    drift_states: List[str]
+    if industry_id == "space_vehicles":
+        drift_states = ["FL", "TX", "AL", "NM"]
+    elif industry_id == "information":
+        drift_states = ["CA", "WA", "VA", "CO"]
+    elif industry_id == "professional_rd":
+        drift_states = ["MA", "MD", "DC", "VA"]
+    else:
+        drift_states = ["CA", "TX", "AZ", "OH"]
+
+    drift_rate = 0.01  # 1% per year toward hubs
+    for st in drift_states:
+        if st in weights:
+            weights[st] *= (1.0 + drift_rate) ** max(0, rel_year_index)
+
+    # Normalize to sum to 1
+    total = float(sum(v for k, v in weights.items() if len(k) <= 2))
+    if total <= 0:
+        n = sum(1 for k in weights.keys() if len(k) <= 2)
+        return {k: 1.0 / max(1, n) for k in weights.keys() if len(k) <= 2}
+    return {k: v / total for k, v in weights.items() if len(k) <= 2}
 
 MULTIPLIERS: Dict[str, float] = {"direct": 1.0, "indirect": 0.4, "induced": 0.3}
 
@@ -43,7 +106,7 @@ def _load_economy() -> pd.DataFrame:
 def predict_jobs(industry_ids: List[str], horizon_years: int, productivity_growth: float) -> Dict[str, Any]:
     econ = _load_economy()
     out: List[Dict[str, Any]] = []
-    geo: List[Dict[str, Any]] = []
+    geo: List[Dict[str, Any]] = []  # per-state per-year timeseries
 
     for ind in industry_ids:
         s = econ[econ["industry_id"].astype(str).str.lower() == ind.lower()].sort_values("year")
@@ -80,13 +143,18 @@ def predict_jobs(industry_ids: List[str], horizon_years: int, productivity_growt
 
         out += totals_industry
 
-        final_total = totals_industry[-1]["employment_total"] if totals_industry else 0
-        for st, w in STATE_WEIGHTS.items():
-            geo.append({
-                "state": st,
-                "industry_id": ind,
-                "total_2030": int(final_total * w * 0.1),
-            })
+        # allocate every forecast year to all states to form a timeseries
+        for idx, row in enumerate(totals_industry):
+            year = row["year"]
+            total = float(row["employment_total"])
+            sw = _normalized_state_weights(ind, idx)
+            for st, w in sw.items():
+                geo.append({
+                    "state": st,
+                    "industry_id": ind,
+                    "year": int(year),
+                    "employment_total": int(round(total * w)),
+                })
 
     return {"items": out, "geo": geo}
 

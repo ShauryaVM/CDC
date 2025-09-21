@@ -2,6 +2,9 @@
 import { useEffect, useState } from 'react';
 import type { GrowthResponse } from '@/lib/schemas';
 import OrbitalRings from '@/components/OrbitalRings';
+import dynamic from 'next/dynamic';
+const GrowthLines = dynamic(() => import('@/components/GrowthLines'), { ssr: false });
+const GrowthDashboard = dynamic(() => import('@/components/growth/GrowthDashboard'), { ssr: false });
 
 export default function GrowthPage() {
   const [industries, setIndustries] = useState<string[]>(['manufacturing','space_vehicles','information','professional_rd']);
@@ -35,7 +38,9 @@ export default function GrowthPage() {
       </div>
       {error && <div className="text-red-500">{error}</div>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data && <div className="col-span-1 md:col-span-2"><OrbitalRings data={data} /></div>}
+        {data && (<div className="col-span-1 md:col-span-2 space-y-4">
+          <GrowthDashboard data={data} />
+        </div>)}
         {data?.items?.map((it)=> (
           <div key={it.industry_id} className="rounded border border-neutral-800 p-3">
             <div className="font-medium mb-1">{it.industry_id}</div>

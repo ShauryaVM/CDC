@@ -2,12 +2,17 @@
 import { useState } from 'react';
 import type { JobsResponse } from '@/lib/schemas';
 import JobsGlobe from '@/components/JobsGlobe';
+import dynamic from 'next/dynamic';
+const JobsDashboard = dynamic(() => import('@/components/jobs/JobsDashboard'), { ssr: false });
 
 export default function JobsPage() {
   const [industries, setIndustries] = useState<string[]>(['manufacturing','space_vehicles']);
   const [horizon, setHorizon] = useState<number>(7);
   const [prod, setProd] = useState<number>(0.02);
   const [data, setData] = useState<JobsResponse | null>(null);
+  const [year, setYear] = useState<number>(2024);
+  const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [selectedIndustry, setSelectedIndustry] = useState<string>('manufacturing');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -34,23 +39,28 @@ export default function JobsPage() {
       </div>
       {error && <div className="text-red-500">{error}</div>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data && <div className="col-span-1 md:col-span-2"><JobsGlobe geo={data.geo} /></div>}
-        <div className="rounded border border-neutral-800 p-3">
-          <div className="font-medium mb-1">Totals</div>
-          {data?.items?.slice(0, 10).map(row => (
-            <div key={`${row.industry_id}-${row.year}`} className="text-sm text-neutral-300">
-              {row.industry_id} {row.year}: total {row.employment_total}
+        {data && (
+          <>
+            <div className="col-span-1 md:col-span-2 space-y-2">
+              <div className="flex items-center gap-3">
+                <label className="text-sm text-neutral-300">Year: {year}</label>
+                <input type="range" min={data.items?.[0]?.year || 2024} max={(data.items?.[data.items.length-1]?.year) || 2030} value={year} onChange={(e)=>setYear(parseInt(e.target.value))} />
+              </div>
+              <JobsGlobe geo={data.geo} year={year} onStateSelect={(s)=>setSelectedState(s)} />
             </div>
-          ))}
-        </div>
-        <div className="rounded border border-neutral-800 p-3">
-          <div className="font-medium mb-1">Geo (2030)</div>
-          {data?.geo?.map(g => (
-            <div key={`${g.state}-${g.industry_id}`} className="text-sm text-neutral-300">
-              {g.state} ({g.industry_id}): {g.total_2030}
-            </div>
-          ))}
-        </div>
+            <div className="col-span-1 md:col-span-2"><JobsDashboard data={data} year={year} industries={industries} selectedIndustry={selectedIndustry} onChangeIndustry={setSelectedIndustry} selectedState={selectedState} onChangeState={(st)=>setSelectedState(st||null)} /></div>
+            {selectedState && (
+              <div className="col-span-1 md:col-span-2 rounded border border-neutral-800 p-4">
+                <div className="font-medium mb-2">{selectedState} portfolio {year}</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-neutral-300">
+                  {data.geo.filter(g=>g.state===selectedState && g.year===year).slice(0,30).map(g=> (
+                    <div key={`${g.state}-${g.industry_id}-${g.year}`}>{g.industry_id}: {g.employment_total}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
